@@ -47,7 +47,7 @@ function render(){
   $('#undo').disabled=!undo;$('#cancel-selection').hidden=!selection;
   $('#selection').textContent=selection?`${categoryById(selection.id).name}を選択中。置きたい時間枠を選んでください。`:'カードを選んで、一日を組み立てよう。';
   timeline.replaceChildren();$('#day-strip').replaceChildren();
-  const viewStart=mobileUI.visibleStart();timeline.style.gridTemplateRows=`repeat(${48-viewStart},68px)`;
+  const viewStart=mobileUI.visibleStart();timeline.style.gridTemplateRows=`repeat(${48-viewStart},${mobileUI.mobile()?100:68}px)`;
   for(let start=0;start<48;start++){
     const occupying=eventAt(day(),start);
     const strip=document.createElement('span');if(occupying)strip.style.background=COLORS[categoryById(occupying[1].categoryId).color][1];$('#day-strip').append(strip);
@@ -63,7 +63,7 @@ function render(){
         slot.classList.add('event-slot');slot.append(activityCard(category,actualStart));
         const move=document.createElement('button');move.type='button';move.className='move-handle';move.dataset.move=String(actualStart);move.textContent='⠿';move.setAttribute('aria-label',`${timeLabel(actualStart)}の${category.name}をドラッグして移動`);slot.append(move);
         const remove=document.createElement('button');remove.className='remove';remove.dataset.remove=String(actualStart);remove.textContent='×';remove.setAttribute('aria-label',`${timeLabel(actualStart)}の${category.name}を削除`);slot.append(remove);
-        const resize=document.createElement('button');resize.type='button';resize.className='resize-handle';resize.dataset.resize=String(start);resize.textContent='↕';resize.setAttribute('aria-label',`${timeLabel(start)}の${category.name}の長さを変更`);resize.title='下端をドラッグして長さを変更（上下キーで30分ずつ）';resize.setAttribute('aria-describedby','resize-help');slot.append(resize);
+        const resize=document.createElement('button');resize.type='button';resize.className='resize-handle';resize.dataset.resize=String(actualStart);resize.textContent=mobileUI.mobile()?'↕ 長さを変更':'↕';resize.setAttribute('aria-label',`${timeLabel(actualStart)}の${category.name}の長さを変更`);resize.title='下端をドラッグして長さを変更（上下キーで30分ずつ）';resize.setAttribute('aria-describedby','resize-help');slot.append(resize);
       }else{const empty=document.createElement('button');empty.className='empty-slot';empty.dataset.target=String(start);empty.setAttribute('aria-label',`${timeLabel(start)}から${timeLabel(start+1)}に予定を置く`);const plus=document.createElement('span');plus.textContent='＋';empty.append(plus,document.createTextNode('ここに予定を置く'));slot.append(empty);}
       timeline.append(slot);
     }
@@ -140,7 +140,7 @@ function updateDragTarget(){
     const delta=Math.round((drag.y-drag.startY-(origin-drag.originTop))/rowHeight());
     const requested=drag.originalDuration+delta;
     drag.duration=Math.max(1,Math.min(drag.limit,requested));
-    drag.container.style.gridRowEnd=`span ${drag.duration}`;drag.container.classList.add('resize-preview');
+    drag.container.style.gridRowEnd=`span ${Math.max(1,drag.duration-Math.max(0,mobileUI.visibleStart()-drag.source))}`;drag.container.classList.add('resize-preview');
     drag.container.querySelector('.activity-duration').textContent=`${timeLabel(drag.source)}–${timeLabel(drag.source+drag.duration)} · ${durationLabel(drag.duration)}`;
     $('#resize-status').textContent=`${timeLabel(drag.source)}〜${timeLabel(drag.source+drag.duration)}（${durationLabel(drag.duration)}）${requested>drag.limit?' · 次の予定または24:00まで':''}`;
     return;
@@ -169,13 +169,13 @@ document.addEventListener('pointerdown',event=>{
     drag={mode:'move',id:card.dataset.category,source,grabOffset:Math.max(0,(rowAtPoint(event.clientX,event.clientY)??source)-source),startX:event.clientX,startY:event.clientY,x:event.clientX,y:event.clientY,pointer:event.pointerId,card,moved:false,target:null};
     moveHandle.setPointerCapture(event.pointerId);return;
   }
-  if(mobileUI.mobile()||event.pointerType==='touch')return;
   const handle=event.target.closest('[data-resize]');
   if(handle){
     const start=Number(handle.dataset.resize);event.preventDefault();handle.focus({preventScroll:true});
     drag={mode:'resize',source:start,originalDuration:day()[start].duration,duration:day()[start].duration,limit:maxDuration(day(),start),container:handle.closest('.slot'),originTop:timeline.querySelector('.hour-label').getBoundingClientRect().top,startX:event.clientX,startY:event.clientY,x:event.clientX,y:event.clientY,pointer:event.pointerId,moved:false};
     handle.setPointerCapture(event.pointerId);return;
   }
+  if(mobileUI.mobile()||event.pointerType==='touch')return;
   const card=event.target.closest('.activity');if(!card||event.button!==0||!event.isPrimary)return;
   const source=card.hasAttribute('data-source')?Number(card.dataset.source):null;
   drag={mode:'move',id:card.dataset.category,source,grabOffset:source===null?0:Math.max(0,Math.floor((event.clientY-card.getBoundingClientRect().top)/rowHeight())),startX:event.clientX,startY:event.clientY,x:event.clientX,y:event.clientY,pointer:event.pointerId,card,moved:false,target:null};
