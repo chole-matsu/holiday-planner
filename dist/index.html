@@ -20,7 +20,7 @@
         <div class="section-heading"><div><p class="eyebrow">ACTIVITIES</p><h2>やりたいこと</h2></div><span class="pill">30分から</span></div>
         <p class="hint palette-desktop-hint">カードを時間枠へドラッグ。<br>選んでから枠をタップしても置けます。</p><p class="hint palette-mobile-hint">タップして予定を追加。持ち物メモもここで編集できます。</p>
         <div id="categories" class="categories"></div>
-        <details class="custom-category"><summary>＋ カテゴリをつくる</summary><form id="category-form"><label for="category-name">カテゴリ名</label><div class="input-row"><input id="category-name" maxlength="24" placeholder="例：映画、カフェ巡り" required><button class="primary" type="submit">追加</button></div></form></details>
+        <details class="custom-category"><summary>＋ カテゴリをつくる</summary><form id="category-form"><label for="category-icon" class="custom-icon-label">アイコン</label><select id="category-icon" class="custom-icon"><option value="📖">📖 読書・学習</option><option value="🚶">🚶 散歩・外出</option><option value="🏋️">🏋️ 運動</option><option value="🎨">🎨 制作・趣味</option><option value="🧹">🧹 掃除</option><option value="🍳">🍳 料理</option><option value="🛒">🛒 買い物</option><option value="🎬">🎬 映画</option><option value="☕">☕ 休憩</option><option value="💼">💼 仕事</option><option value="🛏️">🛏️ 睡眠</option><option value="⭐">⭐ その他</option></select><label for="category-name">カテゴリ名</label><div class="input-row"><input id="category-name" maxlength="24" placeholder="例：映画、カフェ巡り" required><button class="primary" type="submit">追加</button></div></form></details>
         <div id="selection" class="selection" aria-live="polite">カードを選んで、一日を組み立てよう。</div>
         <button id="cancel-selection" class="text-button" hidden>選択を解除</button>
         <div class="notification-box"><div class="section-heading"><h3>開始をお知らせ</h3><span aria-hidden="true">◷</span></div><p>予定の開始時刻に通知します。<br>この画面を開いてお使いください。</p><button id="notifications" class="outline">通知をオンにする</button><p id="notification-status" role="status">画面を閉じた状態・端末のスリープ中は通知できません。</p></div>
@@ -29,7 +29,7 @@
         <div class="schedule-heading"><div><p class="eyebrow">YOUR DAY</p><h2 id="schedule-title"></h2></div><div class="schedule-actions"><span id="planned-count" class="pill"></span><button id="undo" class="text-button" disabled>↶ 元に戻す</button></div></div>
         <div class="day-strip" id="day-strip" aria-hidden="true"></div>
         <div class="mobile-timeline-tools"><button id="early-hours" type="button" aria-pressed="false">0〜6時も表示</button><button type="button" data-jump="14">朝</button><button type="button" data-jump="24">昼</button><button type="button" data-jump="36">夜</button></div>
-        <p class="mobile-instructions">「⠿」をドラッグして移動。下端の「↕ 長さを変更」を上下にドラッグして30分ずつ調整。予定をタップすると編集できます。</p>
+        <p class="mobile-instructions">右上の四方向矢印をドラッグして移動。下端の「↕ 長さを変更」で30分ずつ調整。時計の「今」で現在の日時に戻れます。</p>
         <p id="resize-help" class="resize-help">予定の下端「↕」をドラッグして長さを変更。上下キーでも30分ずつ調整できます。</p>
         <p id="resize-status" class="resize-status" role="status" aria-live="polite"></p>
         <div class="timeline-meta"><span>時間</span><span>今日の予定</span><span>0:00 — 24:00</span></div>

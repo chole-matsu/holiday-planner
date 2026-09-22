@@ -1,5 +1,6 @@
 import {COLORS,localDate,validDate,putActivity,parseState,parseItems,checklistForDay,timeLabel,durationLabel,eventAt,resizeActivity,maxDuration} from './model.js';
 import {setupMobileUI} from './mobile-ui.js';
+import {icon,decorateControls} from './icons.js';
 const $=selector=>document.querySelector(selector);
 const STORAGE='holiday-planner-v1';
 let state,storageBlocked=false,legacyBackup=null;
@@ -61,7 +62,7 @@ function render(){
       const slot=document.createElement('div');slot.className='slot';slot.dataset.hour=String(actualStart);slot.style.gridColumn='2';slot.style.gridRow=`${start-viewStart+1} / span ${entry?entry.duration-(start-actualStart):1}`;
       if(category){
         slot.classList.add('event-slot');slot.append(activityCard(category,actualStart));
-        const move=document.createElement('button');move.type='button';move.className='move-handle';move.dataset.move=String(actualStart);move.textContent='⠿';move.setAttribute('aria-label',`${timeLabel(actualStart)}の${category.name}をドラッグして移動`);slot.append(move);
+        const move=document.createElement('button');move.type='button';move.className='move-handle';move.dataset.move=String(actualStart);move.append(icon('move'));move.setAttribute('aria-label',`${timeLabel(actualStart)}の${category.name}をドラッグして移動`);slot.append(move);
         const remove=document.createElement('button');remove.className='remove';remove.dataset.remove=String(actualStart);remove.textContent='×';remove.setAttribute('aria-label',`${timeLabel(actualStart)}の${category.name}を削除`);slot.append(remove);
         const resize=document.createElement('button');resize.type='button';resize.className='resize-handle';resize.dataset.resize=String(actualStart);resize.textContent=mobileUI.mobile()?'↕ 長さを変更':'↕';resize.setAttribute('aria-label',`${timeLabel(actualStart)}の${category.name}の長さを変更`);resize.title='下端をドラッグして長さを変更（上下キーで30分ずつ）';resize.setAttribute('aria-describedby','resize-help');slot.append(resize);
       }else{const empty=document.createElement('button');empty.className='empty-slot';empty.dataset.target=String(start);empty.setAttribute('aria-label',`${timeLabel(start)}から${timeLabel(start+1)}に予定を置く`);const plus=document.createElement('span');plus.textContent='＋';empty.append(plus,document.createTextNode('ここに予定を置く'));slot.append(empty);}
@@ -69,7 +70,13 @@ function render(){
     }
   }
   timeline.scrollTop=scroll;
-  renderChecklist();
+  renderChecklist();markCurrentTime();
+}
+function markCurrentTime(){
+  timeline.querySelector('.now-marker')?.remove();const now=new Date(),slot=now.getHours()*2+Math.floor(now.getMinutes()/30);
+  document.querySelectorAll('.hour-label').forEach(row=>row.classList.toggle('current',date===localDate(now)&&Number(row.dataset.hour)===slot));
+  if(date!==localDate(now)||slot<mobileUI.visibleStart())return;
+  const marker=document.createElement('div');marker.className='now-marker';marker.style.gridRow=String(slot-mobileUI.visibleStart()+1);marker.style.gridColumn='1 / -1';marker.style.top=`${(now.getMinutes()%30)/30*(mobileUI.mobile()?100:68)}px`;marker.textContent=`現在 ${String(now.getHours()).padStart(2,'0')}:${String(now.getMinutes()).padStart(2,'0')}`;timeline.append(marker);
 }
 function renderChecklist(){
   const items=checklistForDay(state.categories,day(),state.checkedByDate[date]||[]);
@@ -202,13 +209,13 @@ document.addEventListener('keydown',event=>{
 function changeDate(next){if(!validDate(next)){dateInput.value=date;return;}endDrag(true);date=next;dateInput.value=next;selection=null;render();}
 dateInput.addEventListener('change',()=>changeDate(dateInput.value));
 for(const [id,offset] of [['prev-day',-1],['next-day',1]])$("#"+id).addEventListener('click',()=>{const value=new Date(`${date}T12:00:00`);value.setDate(value.getDate()+offset);changeDate(localDate(value));});
-$('#today').addEventListener('click',()=>changeDate(localDate()));
+$('#today').addEventListener('click',()=>{const now=new Date(),slot=now.getHours()*2+Math.floor(now.getMinutes()/30);mobileUI.showTime(slot);changeDate(localDate(now));requestAnimationFrame(()=>timeline.querySelector('.now-marker')?.scrollIntoView({block:'center',behavior:'smooth'}));});
 $('#cancel-selection').addEventListener('click',()=>{selection=null;render();});
 $('#undo').addEventListener('click',()=>{if(!undo)return;const last=undo;state.days[last.date]=last.day;undo=null;changeDate(last.date);save();say('ひとつ前の状態に戻しました');});
 $('#category-form').addEventListener('submit',event=>{
   event.preventDefault();const name=$('#category-name').value.trim();if(!name)return;
   if(state.categories.some(c=>c.name===name)){say('同じ名前のカテゴリがあります');return;}
-  state.categories.push({id:`custom-${crypto.randomUUID()}`,name,icon:'✨',color:Object.keys(COLORS)[state.categories.length%8]});save();render();$('#category-form').reset();say(`${name}を追加しました`);
+  state.categories.push({id:`custom-${crypto.randomUUID()}`,name,icon:$('#category-icon').value,color:Object.keys(COLORS)[state.categories.length%8]});save();render();$('#category-form').reset();say(`${name}を追加しました`);
 });
 window.addEventListener('storage',event=>{
   if(event.key!==STORAGE)return;try{const updated=parseState(event.newValue);endDrag(true);state=updated;selection=null;undo=null;storageBlocked=false;render();say('別のタブの変更を反映しました');}catch{say('別のタブの保存データを読み込めませんでした');}
@@ -235,7 +242,7 @@ $('#notifications').addEventListener('click',async()=>{
 });
 async function checkReminder(){
   const now=new Date();const start=now.getHours()*2+Math.floor(now.getMinutes()/30);
-  document.querySelectorAll('.hour-label').forEach(row=>row.classList.toggle('current',date===localDate(now)&&Number(row.dataset.hour)===start));
+  markCurrentTime();
   if(!notificationsEnabled||!('Notification' in window)||Notification.permission!=='granted'||now.getMinutes()%30!==0)return;
   const keyDate=localDate(now);const entry=state.days[keyDate]?.[start];if(!entry)return;
   const key=`${keyDate}-${start}`;if(delivered.has(key))return;delivered.add(key);
@@ -247,7 +254,7 @@ const mobileUI=setupMobileUI({getState:()=>state,getDate:()=>date,render,
   remove:(editDate,start)=>{undo={date:editDate,day:structuredClone(state.days[editDate]||{})};delete state.days[editDate][start];selection=null;save();render();say('予定を削除しました。「元に戻す」で取り消せます');}
 });
 document.addEventListener('contextmenu',event=>{if(event.target.closest('.activity,.slot,.hour-label,.mobile-nav'))event.preventDefault();});
-render();updateNotificationUI();
+decorateControls();render();updateNotificationUI();
 if(storageBlocked){$('#save-status').textContent='保存データを読み込めません・自動保存停止';say('保存領域を読み込めないため自動保存を停止しています。元データは上書きしません。');}
 requestAnimationFrame(()=>{if(!mobileUI.mobile())timeline.scrollTop=14*rowHeight();});
 setInterval(checkReminder,15000);document.addEventListener('visibilitychange',()=>{if(!document.hidden)checkReminder();});

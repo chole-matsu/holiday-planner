@@ -88,5 +88,5 @@ export function setupMobileUI({getState,getDate,commit,remove,render}) {
   $('#event-delete').addEventListener('click',()=>{
     try{currentDay();dialog.close();setView('schedule',{scroll:false});remove(editorDate,source);}catch(error){$('#event-error').textContent=error.message;}
   });
-  return {mobile,openEvent,openDialog,setView,visibleStart:()=>mobile()&&!showEarly?12:0};
+  return {mobile,openEvent,openDialog,setView,showTime(slot){setView('schedule',{scroll:false});if(slot<12){showEarly=true;$('#early-hours').textContent='6時から表示';$('#early-hours').setAttribute('aria-pressed','true');}},visibleStart:()=>mobile()&&!showEarly?12:0};
 }
