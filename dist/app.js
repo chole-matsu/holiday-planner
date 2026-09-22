@@ -61,6 +61,7 @@ function render(){
       const slot=document.createElement('div');slot.className='slot';slot.dataset.hour=String(actualStart);slot.style.gridColumn='2';slot.style.gridRow=`${start-viewStart+1} / span ${entry?entry.duration-(start-actualStart):1}`;
       if(category){
         slot.classList.add('event-slot');slot.append(activityCard(category,actualStart));
+        const move=document.createElement('button');move.type='button';move.className='move-handle';move.dataset.move=String(actualStart);move.textContent='⠿';move.setAttribute('aria-label',`${timeLabel(actualStart)}の${category.name}をドラッグして移動`);slot.append(move);
         const remove=document.createElement('button');remove.className='remove';remove.dataset.remove=String(actualStart);remove.textContent='×';remove.setAttribute('aria-label',`${timeLabel(actualStart)}の${category.name}を削除`);slot.append(remove);
         const resize=document.createElement('button');resize.type='button';resize.className='resize-handle';resize.dataset.resize=String(start);resize.textContent='↕';resize.setAttribute('aria-label',`${timeLabel(start)}の${category.name}の長さを変更`);resize.title='下端をドラッグして長さを変更（上下キーで30分ずつ）';resize.setAttribute('aria-describedby','resize-help');slot.append(resize);
       }else{const empty=document.createElement('button');empty.className='empty-slot';empty.dataset.target=String(start);empty.setAttribute('aria-label',`${timeLabel(start)}から${timeLabel(start+1)}に予定を置く`);const plus=document.createElement('span');plus.textContent='＋';empty.append(plus,document.createTextNode('ここに予定を置く'));slot.append(empty);}
@@ -110,6 +111,7 @@ function resize(start,duration){
 function select(id,source){selection=selection?.id===id&&selection?.source===source?null:{id,source};render();const cards=[...document.querySelectorAll('.activity')];cards.find(c=>c.dataset.category===id&&(source===null?!c.hasAttribute('data-source'):c.dataset.source===String(source)))?.focus({preventScroll:true});}
 document.addEventListener('click',event=>{
   if(suppressClick){event.preventDefault();return;}
+  if(event.target.closest('[data-move]')){say('移動ボタンを押したまま、移動先の時間へドラッグしてください');return;}
   const editItems=event.target.closest('[data-edit-items]');if(editItems){editingCategory=editItems.dataset.editItems;const category=categoryById(editingCategory);$('#items-title').textContent=`${category.name}の持ち物メモ`;$('#items-text').value=(category.items||[]).join('\n');mobileUI.openDialog(itemsDialog);if(!mobileUI.mobile())$('#items-text').focus();return;}
   const remove=event.target.closest('[data-remove]');if(remove){const hour=Number(remove.dataset.remove);snapshot();delete state.days[date][hour];selection=null;save();render();timeline.querySelector(`[data-target="${hour}"]`)?.focus({preventScroll:true});say('予定を削除しました');return;}
   const card=event.target.closest('.activity');if(card){const source=card.hasAttribute('data-source')?Number(card.dataset.source):null;if(mobileUI.mobile()||event.pointerType==='touch'){mobileUI.openEvent(source,card.dataset.category,source);return;}if(source!==null&&selection&&(selection.source!==source||selection.id!==card.dataset.category)){place(selection.id,source,selection.source);}else select(card.dataset.category,source);return;}
@@ -130,7 +132,7 @@ function rowHeight(){return timeline.querySelector('.hour-label').getBoundingCli
 function rowAtPoint(x,y){
   const rect=timeline.getBoundingClientRect();const first=timeline.querySelector('.hour-label').getBoundingClientRect();
   if(x<first.right||x>rect.right||y<rect.top||y>rect.bottom)return null;
-  const slot=Math.floor((y-first.top)/rowHeight());return slot>=0&&slot<48?slot:null;
+  const slot=Number(timeline.querySelector('.hour-label').dataset.hour)+Math.floor((y-first.top)/rowHeight());return slot>=0&&slot<48?slot:null;
 }
 function updateDragTarget(){
   if(drag.mode==='resize'){
@@ -145,6 +147,7 @@ function updateDragTarget(){
   }
   const row=rowAtPoint(drag.x,drag.y);drag.target=row===null?null:row-drag.grabOffset;
   if(drag.target!==null&&(drag.target<0||drag.target>=48))drag.target=null;
+  if(drag.ghost&&drag.target!==null){const duration=drag.source===null?1:day()[drag.source].duration;drag.ghost.querySelector('.activity-duration').textContent=`${timeLabel(drag.target)}–${timeLabel(drag.target+duration)} · ${durationLabel(duration)}`;}
   const slot=drag.target===null?null:timeline.querySelector(`.slot[data-hour="${eventAt(day(),drag.target)?.[0]??drag.target}"]`);
   document.querySelectorAll('.drop-target').forEach(el=>{if(el!==slot)el.classList.remove('drop-target');});slot?.classList.add('drop-target');
 }
@@ -152,14 +155,21 @@ function trackDrag(){
   if(!drag?.moved)return;
   const rect=timeline.getBoundingClientRect();
   if(drag.x>=rect.left&&drag.x<=rect.right&&drag.y>rect.top-30&&drag.y<rect.bottom+30){if(drag.y<rect.top+60)timeline.scrollTop-=10;else if(drag.y>rect.bottom-60)timeline.scrollTop+=10;}
-  if(drag.y>innerHeight-60)window.scrollBy(0,10);else if(drag.y<60)window.scrollBy(0,-10);
+  const bottom=mobileUI.mobile()?document.querySelector('.mobile-nav').getBoundingClientRect().top:innerHeight;
+  if(drag.y>bottom-60)window.scrollBy(0,10);else if(drag.y<(mobileUI.mobile()?150:60))window.scrollBy(0,-10);
   updateDragTarget();
   if(drag.ghost){drag.ghost.style.left=`${Math.min(drag.x+12,innerWidth-180)}px`;drag.ghost.style.top=`${drag.y-28}px`;}
   drag.frame=requestAnimationFrame(trackDrag);
 }
 document.addEventListener('pointerdown',event=>{
-  if(mobileUI.mobile()||event.pointerType==='touch')return;
   if(event.button!==0||!event.isPrimary)return;
+  const moveHandle=event.target.closest('[data-move]');
+  if(moveHandle){
+    const source=Number(moveHandle.dataset.move),card=moveHandle.closest('.slot').querySelector('.activity');event.preventDefault();
+    drag={mode:'move',id:card.dataset.category,source,grabOffset:Math.max(0,(rowAtPoint(event.clientX,event.clientY)??source)-source),startX:event.clientX,startY:event.clientY,x:event.clientX,y:event.clientY,pointer:event.pointerId,card,moved:false,target:null};
+    moveHandle.setPointerCapture(event.pointerId);return;
+  }
+  if(mobileUI.mobile()||event.pointerType==='touch')return;
   const handle=event.target.closest('[data-resize]');
   if(handle){
     const start=Number(handle.dataset.resize);event.preventDefault();handle.focus({preventScroll:true});
@@ -181,6 +191,7 @@ document.addEventListener('pointermove',event=>{
 });
 document.addEventListener('pointerup',event=>{if(drag?.pointer===event.pointerId){if(drag.moved){drag.x=event.clientX;drag.y=event.clientY;updateDragTarget();}endDrag();}});
 document.addEventListener('pointercancel',()=>endDrag(true));
+document.addEventListener('lostpointercapture',event=>{if(drag?.pointer===event.pointerId)endDrag(true);});
 window.addEventListener('blur',()=>endDrag(true));
 document.addEventListener('keydown',event=>{
   if(event.key==='Escape'){endDrag(true);if(!document.querySelector('dialog[open]')){selection=null;render();}return;}

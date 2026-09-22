@@ -7,6 +7,12 @@ input,textarea{user-select:text;-webkit-user-select:text;-webkit-touch-callout:d
 button,select,a{touch-action:manipulation}
 body.dialog-open{position:fixed;left:0;right:0;width:100%;overflow:hidden}
 .mobile-nav,.mobile-timeline-tools,.mobile-instructions,.palette-mobile-hint{display:none}
+.move-handle{display:none}
+@media(max-width:800px),(pointer:coarse){
+  .timeline .slot>.activity{padding-right:58px!important}
+  .move-handle{display:grid;place-items:center;position:absolute;right:4px;top:4px;width:48px;height:48px;border-radius:10px;background:#ffffffa8;color:var(--green);font-size:28px;touch-action:none;cursor:grab;-webkit-user-select:none;user-select:none;-webkit-touch-callout:none;z-index:3}
+  .move-handle:active{background:#dce9d5;cursor:grabbing}
+}
 .editor-sheet{width:min(510px,calc(100% - 28px));padding:24px;border:1px solid var(--line);border-radius:20px;color:inherit;max-height:90dvh;overflow:auto;overscroll-behavior:contain}
 .editor-sheet::backdrop{background:#183c3866}
 .sheet-heading{display:flex;justify-content:space-between;align-items:center;gap:12px}
