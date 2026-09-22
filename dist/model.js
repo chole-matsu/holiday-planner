@@ -37,6 +37,21 @@ export function putActivity(day,categoryId,target,source=null,duration=1){
   next[target]={categoryId,duration};return next;
 }
 export function maxDuration(day,start){return Math.min(48,...Object.keys(day).map(Number).filter(slot=>slot>start))-start;}
+// Insert at the requested time, cascading only the existing events it overlaps.
+export function planActivity(day,categoryId,start,duration,source=null){
+  validateRange(start,duration);
+  if(source!==null&&(!Number.isInteger(source)||!day[source]))throw new Error('移動元が見つかりません');
+  const next={[start]:{categoryId,duration}},changes=[];
+  let end=start+duration;
+  for(const [key,event] of Object.entries(day).sort((a,b)=>Number(a[0])-Number(b[0]))){
+    const old=Number(key);if(old===source)continue;
+    let target=old;
+    if(old+event.duration>start&&old<end){target=end;changes.push({categoryId:event.categoryId,from:old,to:target,duration:event.duration});}
+    if(target+event.duration>48)throw new Error('後倒しすると24:00を超えます。予定の開始時刻か長さを変更してください。');
+    next[target]={...event};if(target>=start)end=target+event.duration;
+  }
+  return {day:next,changes};
+}
 export function resizeActivity(day,start,duration){
   if(!day[start])throw new Error('予定が見つかりません');validateRange(start,duration);
   if(duration>maxDuration(day,start))throw new Error('次の予定と重なるため延長できません');
@@ -73,6 +88,7 @@ export function parseState(raw){
     }
   }
   for(const category of state.categories){
+    if(category.defaultDuration!==undefined&&(!Number.isInteger(category.defaultDuration)||category.defaultDuration<1||category.defaultDuration>48))throw new Error('標準時間を読み込めません');
     if(category.items!==undefined&&(!Array.isArray(category.items)||category.items.some(item=>typeof item!=='string'||!item.trim())))throw new Error('持ち物を読み込めません');
   }
   if(state.checkedByDate===undefined)state.checkedByDate={};

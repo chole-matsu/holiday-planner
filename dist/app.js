@@ -1,6 +1,7 @@
-import {COLORS,localDate,validDate,putActivity,parseState,parseItems,checklistForDay,timeLabel,durationLabel,eventAt,resizeActivity,maxDuration} from './model.js';
+import {COLORS,localDate,validDate,planActivity,parseState,parseItems,checklistForDay,timeLabel,durationLabel,eventAt,resizeActivity,maxDuration} from './model.js';
 import {setupMobileUI} from './mobile-ui.js';
 import {icon,decorateControls} from './icons.js';
+import {confirmActivity} from './conflicts.js';
 const $=selector=>document.querySelector(selector);
 const STORAGE='holiday-planner-v1';
 let state,storageBlocked=false,legacyBackup=null;
@@ -19,18 +20,18 @@ function save(){
   try{if(legacyBackup){if(!localStorage.getItem(`${STORAGE}-before-half-hour`))localStorage.setItem(`${STORAGE}-before-half-hour`,legacyBackup);legacyBackup=null;}localStorage.setItem(STORAGE,JSON.stringify(state));$('#save-status').textContent='✓ この端末に保存済み';}
   catch{$('#save-status').textContent='保存できません・空き容量を確認してください';say('予定を保存できませんでした。この画面を閉じると変更が失われます。');}
 }
-function snapshot(){undo={date,day:structuredClone(day())};}
+function snapshot(){undo={date,state:structuredClone(state)};}
 function activityCard(category,sourceHour=null){
   const button=document.createElement('button');button.className='activity';button.type='button';button.dataset.category=category.id;
   if(sourceHour!==null)button.dataset.source=String(sourceHour);
   button.style.setProperty('--tint',COLORS[category.color][0]);button.style.setProperty('--accent',COLORS[category.color][1]);
-  const length=sourceHour===null?1:day()[sourceHour].duration;
+  const length=sourceHour===null?(category.defaultDuration||1):day()[sourceHour].duration;
   button.setAttribute('aria-label',`${sourceHour===null?'':timeLabel(sourceHour)+'の'}${category.name}、${durationLabel(length)}。選択して時間枠に配置`);
   button.setAttribute('aria-pressed',String(selection?.id===category.id&&selection?.source===sourceHour));
   if(mobileUI.mobile()) {button.removeAttribute('aria-pressed');button.setAttribute('aria-label',sourceHour===null?`${category.name}の予定を追加`:`${timeLabel(sourceHour)}の${category.name}を編集`);}
   const icon=document.createElement('span');icon.className='activity-icon';icon.textContent=category.icon;icon.setAttribute('aria-hidden','true');
   const body=document.createElement('span');const label=document.createElement('span');label.className='activity-label';label.textContent=category.name;
-  const duration=document.createElement('span');duration.className='activity-duration';duration.textContent=sourceHour===null?'30分':`${timeLabel(sourceHour)}–${timeLabel(sourceHour+length)} · ${durationLabel(length)}`;body.append(label,duration);
+  const duration=document.createElement('span');duration.className='activity-duration';duration.textContent=sourceHour===null?durationLabel(length):`${timeLabel(sourceHour)}–${timeLabel(sourceHour+length)} · ${durationLabel(length)}`;body.append(label,duration);
   const grip=document.createElement('span');grip.className='grip';grip.textContent='⠿';grip.setAttribute('aria-hidden','true');button.append(icon,body,grip);
   return button;
 }
@@ -40,7 +41,7 @@ function render(){
   $('#categories').replaceChildren(...state.categories.map(category=>{
     const wrapper=document.createElement('div');wrapper.className='category-with-items';wrapper.append(activityCard(category));
     const edit=document.createElement('button');edit.type='button';edit.className='items-edit';edit.dataset.editItems=category.id;
-    edit.textContent=`持ち物メモ${category.items?.length?' · '+category.items.length:''}`;edit.setAttribute('aria-label',`${category.name}の持ち物メモを編集`);wrapper.append(edit);return wrapper;
+    edit.textContent='時間・持ち物の設定';edit.setAttribute('aria-label',`${category.name}の標準時間・持ち物を設定`);wrapper.append(edit);return wrapper;
   }));
   const formatted=new Date(`${date}T12:00:00`).toLocaleDateString('ja-JP',{month:'long',day:'numeric',weekday:'short'});
   $('#schedule-title').textContent=formatted;
@@ -92,23 +93,28 @@ function renderChecklist(){
 }
 $('#packing-list').addEventListener('change',event=>{
   const checkbox=event.target.closest('[data-item-name]');if(!checkbox)return;
-  const checked=new Set(state.checkedByDate[date]||[]);
+  snapshot();$('#undo').disabled=false;const checked=new Set(state.checkedByDate[date]||[]);
   if(checkbox.checked)checked.add(checkbox.dataset.itemName);else checked.delete(checkbox.dataset.itemName);
   state.checkedByDate[date]=[...checked];save();checkbox.closest('.packing-item').classList.toggle('packed',checkbox.checked);
   const items=checklistForDay(state.categories,day(),state.checkedByDate[date]);$('#packing-count').textContent=`${items.filter(item=>item.checked).length} / ${items.length} 準備済み`;
 });
 const itemsDialog=$('#items-dialog');let editingCategory=null;
+for(const [form,id,before] of [['#category-form','new-category-duration','#category-form label'],['#items-form','category-duration','#items-form label']]){
+  const label=document.createElement('label');label.htmlFor=id;label.textContent='標準の所要時間';const select=document.createElement('select');select.id=id;select.className='duration-setting';
+  for(let duration=1;duration<=48;duration++)select.add(new Option(durationLabel(duration),String(duration)));
+  const anchor=$(before);$(form).insertBefore(label,anchor);$(form).insertBefore(select,anchor);
+}
 $('#items-cancel').addEventListener('click',()=>itemsDialog.close());
 $('#items-form').addEventListener('submit',event=>{
   event.preventDefault();const category=categoryById(editingCategory);if(!category){itemsDialog.close();return;}
-  category.items=parseItems($('#items-text').value);save();itemsDialog.close();render();
+  snapshot();category.defaultDuration=Number($('#category-duration').value);category.items=parseItems($('#items-text').value);save();itemsDialog.close();render();
   document.querySelector(`[data-edit-items="${editingCategory}"]`)?.focus({preventScroll:true});say(`${category.name}の持ち物を保存しました`);
 });
-function place(id,start,source=null,duration=1){
+function place(id,start,source=null,duration=categoryById(id)?.defaultDuration||1){
   if(source===start)return true;
-  let next;try{next=putActivity(day(),id,start,source,duration);}catch(error){say(error.message);return false;}
-  const occupied=Boolean(day()[start]);snapshot();state.days[date]=next;selection=null;save();render();
-  say(`${categoryById(id).name}を${timeLabel(start)}に${source===null?'配置':'移動'}しました${occupied?(source===null?'（元の予定を置き換え）':'（予定を入れ替え）'):''}`);return true;
+  let next;try{next=confirmActivity(day(),state.categories,id,start,source===null?duration:day()[source].duration,source);}catch(error){say(error.message);return false;}
+  if(!next)return false;snapshot();state.days[date]=next;selection=null;save();render();
+  say(`${categoryById(id).name}を${timeLabel(start)}に${source===null?'配置':'移動'}しました`);return true;
 }
 function resize(start,duration){
   if(day()[start]?.duration===duration)return;
@@ -119,7 +125,7 @@ function select(id,source){selection=selection?.id===id&&selection?.source===sou
 document.addEventListener('click',event=>{
   if(suppressClick){event.preventDefault();return;}
   if(event.target.closest('[data-move]')){say('移動ボタンを押したまま、移動先の時間へドラッグしてください');return;}
-  const editItems=event.target.closest('[data-edit-items]');if(editItems){editingCategory=editItems.dataset.editItems;const category=categoryById(editingCategory);$('#items-title').textContent=`${category.name}の持ち物メモ`;$('#items-text').value=(category.items||[]).join('\n');mobileUI.openDialog(itemsDialog);if(!mobileUI.mobile())$('#items-text').focus();return;}
+  const editItems=event.target.closest('[data-edit-items]');if(editItems){editingCategory=editItems.dataset.editItems;const category=categoryById(editingCategory);$('#items-title').textContent=`${category.name}の設定`;$('#category-duration').value=String(category.defaultDuration||1);$('#items-text').value=(category.items||[]).join('\n');mobileUI.openDialog(itemsDialog);return;}
   const remove=event.target.closest('[data-remove]');if(remove){const hour=Number(remove.dataset.remove);snapshot();delete state.days[date][hour];selection=null;save();render();timeline.querySelector(`[data-target="${hour}"]`)?.focus({preventScroll:true});say('予定を削除しました');return;}
   const card=event.target.closest('.activity');if(card){const source=card.hasAttribute('data-source')?Number(card.dataset.source):null;if(mobileUI.mobile()||event.pointerType==='touch'){mobileUI.openEvent(source,card.dataset.category,source);return;}if(source!==null&&selection&&(selection.source!==source||selection.id!==card.dataset.category)){place(selection.id,source,selection.source);}else select(card.dataset.category,source);return;}
   const target=event.target.closest('[data-target]');if(target){if(mobileUI.mobile()||event.pointerType==='touch'||!selection)mobileUI.openEvent(Number(target.dataset.target));else place(selection.id,Number(target.dataset.target),selection.source);}
@@ -154,7 +160,7 @@ function updateDragTarget(){
   }
   const row=rowAtPoint(drag.x,drag.y);drag.target=row===null?null:row-drag.grabOffset;
   if(drag.target!==null&&(drag.target<0||drag.target>=48))drag.target=null;
-  if(drag.ghost&&drag.target!==null){const duration=drag.source===null?1:day()[drag.source].duration;drag.ghost.querySelector('.activity-duration').textContent=`${timeLabel(drag.target)}–${timeLabel(drag.target+duration)} · ${durationLabel(duration)}`;}
+  if(drag.ghost&&drag.target!==null){const duration=drag.source===null?(categoryById(drag.id).defaultDuration||1):day()[drag.source].duration;drag.ghost.querySelector('.activity-duration').textContent=`${timeLabel(drag.target)}–${timeLabel(drag.target+duration)} · ${durationLabel(duration)}`;}
   const slot=drag.target===null?null:timeline.querySelector(`.slot[data-hour="${eventAt(day(),drag.target)?.[0]??drag.target}"]`);
   document.querySelectorAll('.drop-target').forEach(el=>{if(el!==slot)el.classList.remove('drop-target');});slot?.classList.add('drop-target');
 }
@@ -211,11 +217,11 @@ dateInput.addEventListener('change',()=>changeDate(dateInput.value));
 for(const [id,offset] of [['prev-day',-1],['next-day',1]])$("#"+id).addEventListener('click',()=>{const value=new Date(`${date}T12:00:00`);value.setDate(value.getDate()+offset);changeDate(localDate(value));});
 $('#today').addEventListener('click',()=>{const now=new Date(),slot=now.getHours()*2+Math.floor(now.getMinutes()/30);mobileUI.showTime(slot);changeDate(localDate(now));requestAnimationFrame(()=>timeline.querySelector('.now-marker')?.scrollIntoView({block:'center',behavior:'smooth'}));});
 $('#cancel-selection').addEventListener('click',()=>{selection=null;render();});
-$('#undo').addEventListener('click',()=>{if(!undo)return;const last=undo;state.days[last.date]=last.day;undo=null;changeDate(last.date);save();say('ひとつ前の状態に戻しました');});
+$('#undo').addEventListener('click',()=>{if(!undo)return;const last=undo;state=last.state;undo=null;changeDate(last.date);save();say('ひとつ前の操作を取り消しました');});
 $('#category-form').addEventListener('submit',event=>{
   event.preventDefault();const name=$('#category-name').value.trim();if(!name)return;
   if(state.categories.some(c=>c.name===name)){say('同じ名前のカテゴリがあります');return;}
-  state.categories.push({id:`custom-${crypto.randomUUID()}`,name,icon:$('#category-icon').value,color:Object.keys(COLORS)[state.categories.length%8]});save();render();$('#category-form').reset();say(`${name}を追加しました`);
+  snapshot();state.categories.push({id:`custom-${crypto.randomUUID()}`,name,icon:$('#category-icon').value,defaultDuration:Number($('#new-category-duration').value),color:Object.keys(COLORS)[state.categories.length%8]});save();render();$('#category-form').reset();say(`${name}を追加しました`);
 });
 window.addEventListener('storage',event=>{
   if(event.key!==STORAGE)return;try{const updated=parseState(event.newValue);endDrag(true);state=updated;selection=null;undo=null;storageBlocked=false;render();say('別のタブの変更を反映しました');}catch{say('別のタブの保存データを読み込めませんでした');}
@@ -250,8 +256,8 @@ async function checkReminder(){
   try{await showNotification(`${category.icon} ${category.name}の時間です`,`${timeLabel(start)}〜${timeLabel(start+entry.duration)} の予定`,'holiday-'+key);}catch{say(`${category.name}の時間です（システム通知を表示できませんでした）`);}
 }
 const mobileUI=setupMobileUI({getState:()=>state,getDate:()=>date,render,
-  commit:(editDate,next)=>{undo={date:editDate,day:structuredClone(state.days[editDate]||{})};state.days[editDate]=next;selection=null;date=editDate;dateInput.value=date;save();render();say('予定を保存しました');},
-  remove:(editDate,start)=>{undo={date:editDate,day:structuredClone(state.days[editDate]||{})};delete state.days[editDate][start];selection=null;save();render();say('予定を削除しました。「元に戻す」で取り消せます');}
+  commit:(editDate,next)=>{snapshot();state.days[editDate]=next;selection=null;date=editDate;dateInput.value=date;save();render();say('予定を保存しました');},
+  remove:(editDate,start)=>{snapshot();delete state.days[editDate][start];selection=null;save();render();say('予定を削除しました。「元に戻す」で取り消せます');}
 });
 document.addEventListener('contextmenu',event=>{if(event.target.closest('.activity,.slot,.hour-label,.mobile-nav'))event.preventDefault();});
 decorateControls();render();updateNotificationUI();
@@ -261,7 +267,7 @@ setInterval(checkReminder,15000);document.addEventListener('visibilitychange',()
 
 if(document.modelContext?.registerTool){
   const lifecycle=new AbortController();
-  const tool={name:'place_holiday_activity',title:'休日の予定を配置',description:'指定日に30分単位の予定を配置します。同じ開始時刻・長さの予定は置き換えます。それ以外の重複は拒否します。指定日を表示して保存します。',inputSchema:{type:'object',properties:{date:{type:'string',description:'YYYY-MM-DD'},hour:{type:'number',minimum:0,maximum:23.5,multipleOf:0.5,description:'9.5は09:30'},durationMinutes:{type:'integer',minimum:30,maximum:1440,multipleOf:30,description:'省略時30分'},categoryId:{type:'string',description:'reading, walk, workout, manga, meal, game, rest, sleep またはカスタムカテゴリID'}},required:['date','hour','categoryId'],additionalProperties:false},annotations:{readOnlyHint:false,untrustedContentHint:false},execute(input){const minutes=input?.durationMinutes??30;if(!input||!validDate(input.date)||typeof input.hour!=='number'||!Number.isInteger(input.hour*2)||input.hour<0||input.hour>23.5||!Number.isInteger(minutes/30)||minutes<30||input.hour*2+minutes/30>48||!categoryById(input.categoryId))throw new Error('日付、時刻、長さ、カテゴリを確認してください');putActivity(state.days[input.date]||{},input.categoryId,input.hour*2,null,minutes/30);changeDate(input.date);if(!place(input.categoryId,input.hour*2,null,minutes/30))throw new Error('予定を配置できませんでした');return {date,start:timeLabel(input.hour*2),durationMinutes:minutes,category:categoryById(input.categoryId).name,saveStatus:$('#save-status').textContent};}};
+  const tool={name:'place_holiday_activity',title:'休日の予定を配置',description:'指定日に30分単位の予定を配置します。重なる場合は既存の予定を後倒しする確認を表示します。指定日を表示して保存します。',inputSchema:{type:'object',properties:{date:{type:'string',description:'YYYY-MM-DD'},hour:{type:'number',minimum:0,maximum:23.5,multipleOf:0.5,description:'9.5は09:30'},durationMinutes:{type:'integer',minimum:30,maximum:1440,multipleOf:30,description:'省略時カテゴリの標準時間'},categoryId:{type:'string',description:'reading, walk, workout, manga, meal, game, rest, sleep またはカスタムカテゴリID'}},required:['date','hour','categoryId'],additionalProperties:false},annotations:{readOnlyHint:false,untrustedContentHint:false},execute(input){const minutes=input?.durationMinutes??((categoryById(input?.categoryId)?.defaultDuration||1)*30);if(!input||!validDate(input.date)||typeof input.hour!=='number'||!Number.isInteger(input.hour*2)||input.hour<0||input.hour>23.5||!Number.isInteger(minutes/30)||minutes<30||input.hour*2+minutes/30>48||!categoryById(input.categoryId))throw new Error('日付、時刻、長さ、カテゴリを確認してください');planActivity(state.days[input.date]||{},input.categoryId,input.hour*2,minutes/30);changeDate(input.date);if(!place(input.categoryId,input.hour*2,null,minutes/30))throw new Error('予定を配置できませんでした');return {date,start:timeLabel(input.hour*2),durationMinutes:minutes,category:categoryById(input.categoryId).name,saveStatus:$('#save-status').textContent};}};
   try{Promise.resolve(document.modelContext.registerTool(tool,{signal:lifecycle.signal})).catch(()=>{});}catch{}
   window.addEventListener('pagehide',()=>lifecycle.abort(),{once:true});
 }

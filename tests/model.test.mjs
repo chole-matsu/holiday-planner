@@ -1,5 +1,13 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
+import {planActivity} from '../dist/model.js';
+import {confirmActivity} from '../dist/conflicts.js';
+test('重複する既存予定を連鎖して後倒しし、空き時間以降は維持',()=>{const day={18:{categoryId:'reading',duration:2},20:{categoryId:'walk',duration:2},28:{categoryId:'meal',duration:2}};const plan=planActivity(day,'workout',19,4);assert.deepEqual(Object.keys(plan.day),['19','23','25','28']);assert.deepEqual(plan.changes.map(c=>[c.from,c.to]),[[18,23],[20,25]]);assert.equal(day[18].duration,2);});
+test('移動元を除いて後倒し計画を作る',()=>{const plan=planActivity({10:{categoryId:'walk',duration:2},18:{categoryId:'reading',duration:4}},'walk',19,2,10);assert.deepEqual(Object.keys(plan.day),['19','21']);assert.equal(plan.day[21].duration,4);});
+test('後倒しが24時を超える場合は元データを維持',()=>{const day={46:{categoryId:'sleep',duration:2}};assert.throws(()=>planActivity(day,'reading',45,2),/24:00/);assert.deepEqual(Object.keys(day),['46']);});
+test('確認は一度だけ、キャンセルは変更せずOKは全変更を返す',()=>{const day={18:{categoryId:'reading',duration:2},20:{categoryId:'walk',duration:2}};let calls=0;globalThis.window={confirm:()=>{calls++;return false;}};try{assert.equal(confirmActivity(day,[],'meal',18,4),null);assert.equal(calls,1);assert.deepEqual(Object.keys(day),['18','20']);window.confirm=()=>{calls++;return true;};assert.deepEqual(Object.keys(confirmActivity(day,[],'meal',18,4)),['18','22','24']);assert.equal(calls,2);}finally{delete globalThis.window;}});
+test('重複なしは確認せず配置',()=>{assert.deepEqual(planActivity({10:{categoryId:'walk',duration:2}},'reading',12,4).changes,[]);assert.deepEqual(confirmActivity({},[],'reading',12,4),{12:{categoryId:'reading',duration:4}});});
+test('カテゴリの標準時間を保存復元し不正値を拒否',()=>{const state=parseState(null);state.categories[0].defaultDuration=4;assert.equal(parseState(JSON.stringify(state)).categories[0].defaultDuration,4);state.categories[0].defaultDuration=0;assert.throws(()=>parseState(JSON.stringify(state)));});
 import {putActivity,parseState,validDate,parseItems,checklistForDay,resizeActivity,maxDuration,eventAt,timeLabel,durationLabel,editActivity} from '../dist/model.js';
 const event=(categoryId,duration=1)=>({categoryId,duration});
 test('編集画面でカテゴリ・開始・長さをまとめて変更',()=>{const before={18:event('reading',2),30:event('walk')};assert.deepEqual(editActivity(before,'manga',19,4,18),{19:event('manga',4),30:event('walk')});assert.deepEqual(before,{18:event('reading',2),30:event('walk')});});

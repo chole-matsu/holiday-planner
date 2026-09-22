@@ -1,4 +1,5 @@
 import {COLORS,timeLabel,durationLabel,editActivity,eventAt} from './model.js';
+import {confirmActivity} from './conflicts.js';
 
 export function setupMobileUI({getState,getDate,commit,remove,render}) {
   const $=selector=>document.querySelector(selector);
@@ -62,11 +63,12 @@ export function setupMobileUI({getState,getDate,commit,remove,render}) {
       const input=document.createElement('input');input.type='radio';input.name='event-category';input.value=category.id;input.checked=category.id===selected;input.required=true;
       const text=document.createElement('span');text.textContent=`${category.icon} ${category.name}`;label.append(input,text);return label;
     }));
-    $('#event-start').value=String(start);previousStart=start;$('#event-end').value=String(start+(entry?.duration||1));
+    $('#event-start').value=String(start);previousStart=start;$('#event-end').value=String(Math.min(48,start+(entry?.duration||getState().categories.find(c=>c.id===selected)?.defaultDuration||1)));
     $('#event-delete').hidden=!entry;syncDuration();openDialog(dialog);
     $('#event-cancel').focus({preventScroll:true});
   }
   $('#add-event').addEventListener('click',()=>openEvent());
+  $('#event-category-options').addEventListener('change',event=>{if(source===null)setDuration(getState().categories.find(c=>c.id===event.target.value)?.defaultDuration||1);});
   $('#event-cancel').addEventListener('click',()=>dialog.close());
   function currentDay(){
     const current=getState().days[editorDate]||{};
@@ -79,7 +81,7 @@ export function setupMobileUI({getState,getDate,commit,remove,render}) {
       const categoryId=$('input[name="event-category"]:checked')?.value;
       if(!getState().categories.some(category=>category.id===categoryId))throw new Error('カテゴリを選んでください。');
       const start=Number($('#event-start').value),duration=Number($('#event-end').value)-start;
-      const next=editActivity(currentDay(),categoryId,start,duration,source);
+      const next=confirmActivity(currentDay(),getState().categories,categoryId,start,duration,source);if(!next)return;
       if(mobile()&&start<12){showEarly=true;$('#early-hours').textContent='6時から表示';$('#early-hours').setAttribute('aria-pressed','true');}
       dialog.close();setView('schedule',{scroll:false});commit(editorDate,next);
       if(mobile())requestAnimationFrame(()=>$(`.slot[data-hour="${start}"]`)?.scrollIntoView({block:'center',behavior:'smooth'}));
