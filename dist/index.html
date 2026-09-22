@@ -1,0 +1,56 @@
+<!doctype html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <meta name="theme-color" content="#255e50">
+  <meta name="description" content="30分刻みで予定を並べて、ドラッグで長さも変えられる休日のスケジュール帳。">
+  <title>休日手帖 — 30分からつくる、一日の予定</title>
+  <link rel="icon" href="./favicon.svg" type="image/svg+xml">
+  <link rel="stylesheet" href="./style.css">
+  <script type="module" src="./app.js"></script>
+</head>
+<body>
+  <header class="topbar"><a class="brand" href="./"><span class="brand-mark" aria-hidden="true">休</span>休日手帖<span class="brand-en">DAY OFF PLANNER</span></a><span id="save-status" role="status">この端末に自動保存</span></header>
+  <main>
+    <section class="heading"><div><p class="eyebrow">MAKE TIME FOR YOURSELF</p><h1>次の休日、なにしよう。</h1><p class="intro">好きなことを、好きな長さで。</p></div><div class="date-control"><button id="prev-day" class="icon-button" aria-label="前の日">←</button><div><label for="date">予定を立てる日</label><input id="date" type="date" required></div><button id="next-day" class="icon-button" aria-label="次の日">→</button><button id="today" class="text-button">今日</button></div></section>
+    <div class="workspace">
+      <aside class="palette-panel" aria-label="カテゴリ一覧">
+        <div class="section-heading"><div><p class="eyebrow">ACTIVITIES</p><h2>やりたいこと</h2></div><span class="pill">30分から</span></div>
+        <p class="hint">カードを時間枠へドラッグ。<br>選んでから枠をタップしても置けます。</p>
+        <div id="categories" class="categories"></div>
+        <details class="custom-category"><summary>＋ カテゴリをつくる</summary><form id="category-form"><label for="category-name">カテゴリ名</label><div class="input-row"><input id="category-name" maxlength="24" placeholder="例：映画、カフェ巡り" required><button class="primary" type="submit">追加</button></div></form></details>
+        <div id="selection" class="selection" aria-live="polite">カードを選んで、一日を組み立てよう。</div>
+        <button id="cancel-selection" class="text-button" hidden>選択を解除</button>
+        <div class="notification-box"><div class="section-heading"><h3>開始をお知らせ</h3><span aria-hidden="true">◷</span></div><p>予定の開始時刻に通知します。<br>この画面を開いてお使いください。</p><button id="notifications" class="outline">通知をオンにする</button><p id="notification-status" role="status">画面を閉じた状態・端末のスリープ中は通知できません。</p></div>
+      </aside>
+      <section class="schedule-panel" aria-labelledby="schedule-title">
+        <div class="schedule-heading"><div><p class="eyebrow">YOUR DAY</p><h2 id="schedule-title"></h2></div><div class="schedule-actions"><span id="planned-count" class="pill"></span><button id="undo" class="text-button" disabled>↶ 元に戻す</button></div></div>
+        <div class="day-strip" id="day-strip" aria-hidden="true"></div>
+        <p id="resize-help" class="resize-help">予定の下端「↕」をドラッグして長さを変更。上下キーでも30分ずつ調整できます。</p>
+        <p id="resize-status" class="resize-status" role="status" aria-live="polite"></p>
+        <div class="timeline-meta"><span>時間</span><span>今日の予定</span><span>0:00 — 24:00</span></div>
+        <div class="timeline" id="timeline" aria-label="24時間の予定表"></div>
+        <div class="schedule-footer"><span>余白も、大切な予定。</span><span id="free-count"></span></div>
+        <section class="packing-section" aria-labelledby="packing-title">
+          <div class="section-heading"><h2 id="packing-title">忘れ物チェックリスト</h2><span id="packing-count" class="pill" role="status"></span></div>
+          <p class="hint">この日の予定に必要なもの。カテゴリの「持ち物メモ」から登録できます。</p>
+          <div id="packing-list"></div>
+        </section>
+      </section>
+    </div>
+  </main>
+  <dialog id="items-dialog" aria-labelledby="items-title">
+    <form id="items-form">
+      <h2 id="items-title">持ち物メモ</h2>
+      <p class="hint">このカテゴリで使うものを登録すると、予定がある日のチェックリストに自動でまとまります。</p>
+      <label for="items-text">必要なもの（1行に1つ）</label>
+      <textarea id="items-text" rows="7" placeholder="本&#10;メガネ&#10;飲み物"></textarea>
+      <p class="hint">空にして保存すると、登録した持ち物を削除できます。</p>
+      <div class="dialog-actions"><button type="button" id="items-cancel" class="outline">キャンセル</button><button type="submit" class="primary">保存</button></div>
+    </form>
+  </dialog>
+  <div id="toast" class="toast" role="status" aria-live="polite" hidden></div>
+  <noscript>予定表を使うには、ブラウザのJavaScriptを有効にしてください。</noscript>
+</body>
+</html>
