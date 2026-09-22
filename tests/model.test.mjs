@@ -1,7 +1,11 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {putActivity,parseState,validDate,parseItems,checklistForDay,resizeActivity,maxDuration,eventAt,timeLabel,durationLabel} from '../dist/model.js';
+import {putActivity,parseState,validDate,parseItems,checklistForDay,resizeActivity,maxDuration,eventAt,timeLabel,durationLabel,editActivity} from '../dist/model.js';
 const event=(categoryId,duration=1)=>({categoryId,duration});
+test('編集画面でカテゴリ・開始・長さをまとめて変更',()=>{const before={18:event('reading',2),30:event('walk')};assert.deepEqual(editActivity(before,'manga',19,4,18),{19:event('manga',4),30:event('walk')});assert.deepEqual(before,{18:event('reading',2),30:event('walk')});});
+test('編集画面は同じ長さの別予定も置き換えず重複を拒否',()=>{const before={18:event('reading'),19:event('walk')};assert.throws(()=>editActivity(before,'manga',19,1,18));assert.throws(()=>editActivity(before,'manga',18,1));assert.deepEqual(before,{18:event('reading'),19:event('walk')});});
+test('編集画面のキャンセル・エラーでは元データが変わらない',()=>{const before={18:event('reading',4)};assert.throws(()=>editActivity(before,'reading',47,4,18));assert.throws(()=>editActivity(before,'reading',18,0,18));assert.throws(()=>editActivity(before,'reading',18,1,17));assert.deepEqual(before,{18:event('reading',4)});});
+test('編集画面で23:30〜24:00を登録できる',()=>assert.deepEqual(editActivity({},'sleep',47,1),{47:event('sleep')}));
 test('30分の予定を繰り返し配置し、入力は変更しない',()=>{const before={18:event('reading')};assert.deepEqual(putActivity(before,'reading',19),{18:event('reading'),19:event('reading')});assert.deepEqual(before,{18:event('reading')});});
 test('2時間の予定を30分刻みで移動し長さを保持',()=>assert.deepEqual(putActivity({18:event('reading',4)},'reading',25,18),{25:event('reading',4)}));
 test('同じ長さの予定は入れ替えできる',()=>assert.deepEqual(putActivity({18:event('reading',4),24:event('manga',4)},'reading',24,18),{18:event('manga',4),24:event('reading',4)}));

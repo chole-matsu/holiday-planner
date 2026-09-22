@@ -2,12 +2,13 @@
 <html lang="ja">
 <head>
   <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
   <meta name="theme-color" content="#255e50">
   <meta name="description" content="30分刻みで予定を並べて、ドラッグで長さも変えられる休日のスケジュール帳。">
   <title>休日手帖 — 30分からつくる、一日の予定</title>
   <link rel="icon" href="./favicon.svg" type="image/svg+xml">
   <link rel="stylesheet" href="./style.css">
+  <link rel="stylesheet" href="./mobile.css">
   <script type="module" src="./app.js"></script>
 </head>
 <body>
@@ -15,9 +16,9 @@
   <main>
     <section class="heading"><div><p class="eyebrow">MAKE TIME FOR YOURSELF</p><h1>次の休日、なにしよう。</h1><p class="intro">好きなことを、好きな長さで。</p></div><div class="date-control"><button id="prev-day" class="icon-button" aria-label="前の日">←</button><div><label for="date">予定を立てる日</label><input id="date" type="date" required></div><button id="next-day" class="icon-button" aria-label="次の日">→</button><button id="today" class="text-button">今日</button></div></section>
     <div class="workspace">
-      <aside class="palette-panel" aria-label="カテゴリ一覧">
+      <aside class="palette-panel" id="palette-panel" aria-label="カテゴリ一覧">
         <div class="section-heading"><div><p class="eyebrow">ACTIVITIES</p><h2>やりたいこと</h2></div><span class="pill">30分から</span></div>
-        <p class="hint">カードを時間枠へドラッグ。<br>選んでから枠をタップしても置けます。</p>
+        <p class="hint palette-desktop-hint">カードを時間枠へドラッグ。<br>選んでから枠をタップしても置けます。</p><p class="hint palette-mobile-hint">タップして予定を追加。持ち物メモもここで編集できます。</p>
         <div id="categories" class="categories"></div>
         <details class="custom-category"><summary>＋ カテゴリをつくる</summary><form id="category-form"><label for="category-name">カテゴリ名</label><div class="input-row"><input id="category-name" maxlength="24" placeholder="例：映画、カフェ巡り" required><button class="primary" type="submit">追加</button></div></form></details>
         <div id="selection" class="selection" aria-live="polite">カードを選んで、一日を組み立てよう。</div>
@@ -27,6 +28,8 @@
       <section class="schedule-panel" aria-labelledby="schedule-title">
         <div class="schedule-heading"><div><p class="eyebrow">YOUR DAY</p><h2 id="schedule-title"></h2></div><div class="schedule-actions"><span id="planned-count" class="pill"></span><button id="undo" class="text-button" disabled>↶ 元に戻す</button></div></div>
         <div class="day-strip" id="day-strip" aria-hidden="true"></div>
+        <div class="mobile-timeline-tools"><button id="early-hours" type="button" aria-pressed="false">0〜6時も表示</button><button type="button" data-jump="14">朝</button><button type="button" data-jump="24">昼</button><button type="button" data-jump="36">夜</button></div>
+        <p class="mobile-instructions">空き枠をタップして追加。予定をタップして時間を変更。</p>
         <p id="resize-help" class="resize-help">予定の下端「↕」をドラッグして長さを変更。上下キーでも30分ずつ調整できます。</p>
         <p id="resize-status" class="resize-status" role="status" aria-live="polite"></p>
         <div class="timeline-meta"><span>時間</span><span>今日の予定</span><span>0:00 — 24:00</span></div>
@@ -40,6 +43,24 @@
       </section>
     </div>
   </main>
+  <nav class="mobile-nav" aria-label="画面切り替え">
+    <button type="button" id="view-schedule" aria-pressed="true">予定</button>
+    <button type="button" id="view-categories" aria-pressed="false">カテゴリ</button>
+    <button type="button" id="view-packing" aria-pressed="false">持ち物</button>
+    <button type="button" id="add-event" class="primary">＋ 予定</button>
+  </nav>
+  <dialog id="event-dialog" class="editor-sheet" aria-labelledby="event-title">
+    <form id="event-form">
+      <div class="sheet-heading"><h2 id="event-title">予定を追加</h2><button type="button" id="event-cancel" class="sheet-close" aria-label="予定の編集を閉じる">×</button></div>
+      <p id="event-date" class="hint"></p>
+      <fieldset class="event-categories"><legend>やりたいこと</legend><div id="event-category-options"></div></fieldset>
+      <div class="event-times"><label for="event-start">開始<select id="event-start"></select></label><label for="event-end">終了<select id="event-end"></select></label></div>
+      <div class="duration-adjust"><button type="button" id="duration-minus" aria-label="予定を30分短くする">−30分</button><output id="event-duration" aria-live="polite"></output><button type="button" id="duration-plus" aria-label="予定を30分長くする">＋30分</button></div>
+      <div class="duration-presets" aria-label="予定の長さ"><button type="button" data-duration="1">30分</button><button type="button" data-duration="2">1時間</button><button type="button" data-duration="4">2時間</button><button type="button" data-duration="6">3時間</button></div>
+      <p id="event-error" role="alert"></p>
+      <div class="event-form-actions"><button type="button" id="event-delete" class="danger-button" hidden>予定を削除</button><button type="submit" class="primary">保存する</button></div>
+    </form>
+  </dialog>
   <dialog id="items-dialog" aria-labelledby="items-title">
     <form id="items-form">
       <h2 id="items-title">持ち物メモ</h2>

@@ -42,6 +42,14 @@ export function resizeActivity(day,start,duration){
   if(duration>maxDuration(day,start))throw new Error('次の予定と重なるため延長できません');
   return {...day,[start]:{...day[start],duration}};
 }
+// Form edits are atomic: conflicting changes never replace another event.
+export function editActivity(day,categoryId,start,duration,source=null){
+  validateRange(start,duration);
+  const next=structuredClone(day);
+  if(source!==null){if(!Number.isInteger(source)||!next[source])throw new Error('編集する予定が見つかりません');delete next[source];}
+  if(!freeRange(next,start,duration))throw new Error('他の予定と重なっています。開始時刻か長さを変更してください。');
+  next[start]={categoryId,duration};return next;
+}
 export function parseState(raw){
   if(!raw)return {version:2,categories:structuredClone(DEFAULT_CATEGORIES),days:{},checkedByDate:{}};
   const state=JSON.parse(raw);

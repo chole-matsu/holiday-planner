@@ -1,4 +1,5 @@
 import {COLORS,localDate,validDate,putActivity,parseState,parseItems,checklistForDay,timeLabel,durationLabel,eventAt,resizeActivity,maxDuration} from './model.js';
+import {setupMobileUI} from './mobile-ui.js';
 const $=selector=>document.querySelector(selector);
 const STORAGE='holiday-planner-v1';
 let state,storageBlocked=false,legacyBackup=null;
@@ -25,6 +26,7 @@ function activityCard(category,sourceHour=null){
   const length=sourceHour===null?1:day()[sourceHour].duration;
   button.setAttribute('aria-label',`${sourceHour===null?'':timeLabel(sourceHour)+'の'}${category.name}、${durationLabel(length)}。選択して時間枠に配置`);
   button.setAttribute('aria-pressed',String(selection?.id===category.id&&selection?.source===sourceHour));
+  if(mobileUI.mobile()) {button.removeAttribute('aria-pressed');button.setAttribute('aria-label',sourceHour===null?`${category.name}の予定を追加`:`${timeLabel(sourceHour)}の${category.name}を編集`);}
   const icon=document.createElement('span');icon.className='activity-icon';icon.textContent=category.icon;icon.setAttribute('aria-hidden','true');
   const body=document.createElement('span');const label=document.createElement('span');label.className='activity-label';label.textContent=category.name;
   const duration=document.createElement('span');duration.className='activity-duration';duration.textContent=sourceHour===null?'30分':`${timeLabel(sourceHour)}–${timeLabel(sourceHour+length)} · ${durationLabel(length)}`;body.append(label,duration);
@@ -45,21 +47,25 @@ function render(){
   $('#undo').disabled=!undo;$('#cancel-selection').hidden=!selection;
   $('#selection').textContent=selection?`${categoryById(selection.id).name}を選択中。置きたい時間枠を選んでください。`:'カードを選んで、一日を組み立てよう。';
   timeline.replaceChildren();$('#day-strip').replaceChildren();
+  const viewStart=mobileUI.visibleStart();timeline.style.gridTemplateRows=`repeat(${48-viewStart},68px)`;
   for(let start=0;start<48;start++){
-    const entry=day()[start];const occupying=eventAt(day(),start);const category=categoryById(entry?.categoryId);
-    const label=document.createElement('div');label.className='hour-label';label.dataset.hour=String(start);label.textContent=timeLabel(start);label.style.gridRow=String(start+1);label.style.gridColumn='1';
+    const occupying=eventAt(day(),start);
+    const strip=document.createElement('span');if(occupying)strip.style.background=COLORS[categoryById(occupying[1].categoryId).color][1];$('#day-strip').append(strip);
+    if(start<viewStart)continue;
+    const actualStart=start===viewStart&&occupying?Number(occupying[0]):start;
+    const entry=day()[actualStart];const category=categoryById(entry?.categoryId);
+    const label=document.createElement('div');label.className='hour-label';label.dataset.hour=String(start);label.textContent=timeLabel(start);label.style.gridRow=String(start-viewStart+1);label.style.gridColumn='1';
     if(start%2)label.classList.add('half-hour');
     const now=new Date();if(date===localDate(now)&&start===now.getHours()*2+Math.floor(now.getMinutes()/30))label.classList.add('current');timeline.append(label);
     if(entry||!occupying){
-      const slot=document.createElement('div');slot.className='slot';slot.dataset.hour=String(start);slot.style.gridColumn='2';slot.style.gridRow=`${start+1} / span ${entry?.duration||1}`;
+      const slot=document.createElement('div');slot.className='slot';slot.dataset.hour=String(actualStart);slot.style.gridColumn='2';slot.style.gridRow=`${start-viewStart+1} / span ${entry?entry.duration-(start-actualStart):1}`;
       if(category){
-        slot.classList.add('event-slot');slot.append(activityCard(category,start));
-        const remove=document.createElement('button');remove.className='remove';remove.dataset.remove=String(start);remove.textContent='×';remove.setAttribute('aria-label',`${timeLabel(start)}の${category.name}を削除`);slot.append(remove);
+        slot.classList.add('event-slot');slot.append(activityCard(category,actualStart));
+        const remove=document.createElement('button');remove.className='remove';remove.dataset.remove=String(actualStart);remove.textContent='×';remove.setAttribute('aria-label',`${timeLabel(actualStart)}の${category.name}を削除`);slot.append(remove);
         const resize=document.createElement('button');resize.type='button';resize.className='resize-handle';resize.dataset.resize=String(start);resize.textContent='↕';resize.setAttribute('aria-label',`${timeLabel(start)}の${category.name}の長さを変更`);resize.title='下端をドラッグして長さを変更（上下キーで30分ずつ）';resize.setAttribute('aria-describedby','resize-help');slot.append(resize);
       }else{const empty=document.createElement('button');empty.className='empty-slot';empty.dataset.target=String(start);empty.setAttribute('aria-label',`${timeLabel(start)}から${timeLabel(start+1)}に予定を置く`);const plus=document.createElement('span');plus.textContent='＋';empty.append(plus,document.createTextNode('ここに予定を置く'));slot.append(empty);}
       timeline.append(slot);
     }
-    const strip=document.createElement('span');if(occupying)strip.style.background=COLORS[categoryById(occupying[1].categoryId).color][1];$('#day-strip').append(strip);
   }
   timeline.scrollTop=scroll;
   renderChecklist();
@@ -104,10 +110,10 @@ function resize(start,duration){
 function select(id,source){selection=selection?.id===id&&selection?.source===source?null:{id,source};render();const cards=[...document.querySelectorAll('.activity')];cards.find(c=>c.dataset.category===id&&(source===null?!c.hasAttribute('data-source'):c.dataset.source===String(source)))?.focus({preventScroll:true});}
 document.addEventListener('click',event=>{
   if(suppressClick){event.preventDefault();return;}
-  const editItems=event.target.closest('[data-edit-items]');if(editItems){editingCategory=editItems.dataset.editItems;const category=categoryById(editingCategory);$('#items-title').textContent=`${category.name}の持ち物メモ`;$('#items-text').value=(category.items||[]).join('\n');itemsDialog.showModal();$('#items-text').focus();return;}
+  const editItems=event.target.closest('[data-edit-items]');if(editItems){editingCategory=editItems.dataset.editItems;const category=categoryById(editingCategory);$('#items-title').textContent=`${category.name}の持ち物メモ`;$('#items-text').value=(category.items||[]).join('\n');mobileUI.openDialog(itemsDialog);if(!mobileUI.mobile())$('#items-text').focus();return;}
   const remove=event.target.closest('[data-remove]');if(remove){const hour=Number(remove.dataset.remove);snapshot();delete state.days[date][hour];selection=null;save();render();timeline.querySelector(`[data-target="${hour}"]`)?.focus({preventScroll:true});say('予定を削除しました');return;}
-  const card=event.target.closest('.activity');if(card){const source=card.hasAttribute('data-source')?Number(card.dataset.source):null;if(source!==null&&selection&&(selection.source!==source||selection.id!==card.dataset.category)){place(selection.id,source,selection.source);}else select(card.dataset.category,source);return;}
-  const target=event.target.closest('[data-target]');if(target){if(selection)place(selection.id,Number(target.dataset.target),selection.source);else say('先にカテゴリ一覧からカードを選んでください');}
+  const card=event.target.closest('.activity');if(card){const source=card.hasAttribute('data-source')?Number(card.dataset.source):null;if(mobileUI.mobile()||event.pointerType==='touch'){mobileUI.openEvent(source,card.dataset.category,source);return;}if(source!==null&&selection&&(selection.source!==source||selection.id!==card.dataset.category)){place(selection.id,source,selection.source);}else select(card.dataset.category,source);return;}
+  const target=event.target.closest('[data-target]');if(target){if(mobileUI.mobile()||event.pointerType==='touch'||!selection)mobileUI.openEvent(Number(target.dataset.target));else place(selection.id,Number(target.dataset.target),selection.source);}
 });
 function endDrag(cancelled=false){
   if(!drag)return;const active=drag;drag=null;cancelAnimationFrame(active.frame);
@@ -152,6 +158,7 @@ function trackDrag(){
   drag.frame=requestAnimationFrame(trackDrag);
 }
 document.addEventListener('pointerdown',event=>{
+  if(mobileUI.mobile()||event.pointerType==='touch')return;
   if(event.button!==0||!event.isPrimary)return;
   const handle=event.target.closest('[data-resize]');
   if(handle){
@@ -176,7 +183,7 @@ document.addEventListener('pointerup',event=>{if(drag?.pointer===event.pointerId
 document.addEventListener('pointercancel',()=>endDrag(true));
 window.addEventListener('blur',()=>endDrag(true));
 document.addEventListener('keydown',event=>{
-  if(event.key==='Escape'){endDrag(true);if(!itemsDialog.open){selection=null;render();}return;}
+  if(event.key==='Escape'){endDrag(true);if(!document.querySelector('dialog[open]')){selection=null;render();}return;}
   const handle=event.target.closest('[data-resize]');if(handle&&['ArrowUp','ArrowDown'].includes(event.key)){
     event.preventDefault();const start=Number(handle.dataset.resize);resize(start,day()[start].duration+(event.key==='ArrowDown'?1:-1));
   }
@@ -224,9 +231,14 @@ async function checkReminder(){
   const category=categoryById(entry.categoryId);
   try{await showNotification(`${category.icon} ${category.name}の時間です`,`${timeLabel(start)}〜${timeLabel(start+entry.duration)} の予定`,'holiday-'+key);}catch{say(`${category.name}の時間です（システム通知を表示できませんでした）`);}
 }
+const mobileUI=setupMobileUI({getState:()=>state,getDate:()=>date,render,
+  commit:(editDate,next)=>{undo={date:editDate,day:structuredClone(state.days[editDate]||{})};state.days[editDate]=next;selection=null;date=editDate;dateInput.value=date;save();render();say('予定を保存しました');},
+  remove:(editDate,start)=>{undo={date:editDate,day:structuredClone(state.days[editDate]||{})};delete state.days[editDate][start];selection=null;save();render();say('予定を削除しました。「元に戻す」で取り消せます');}
+});
+document.addEventListener('contextmenu',event=>{if(event.target.closest('.activity,.slot,.hour-label,.mobile-nav'))event.preventDefault();});
 render();updateNotificationUI();
 if(storageBlocked){$('#save-status').textContent='保存データを読み込めません・自動保存停止';say('保存領域を読み込めないため自動保存を停止しています。元データは上書きしません。');}
-requestAnimationFrame(()=>{timeline.scrollTop=14*rowHeight();});
+requestAnimationFrame(()=>{if(!mobileUI.mobile())timeline.scrollTop=14*rowHeight();});
 setInterval(checkReminder,15000);document.addEventListener('visibilitychange',()=>{if(!document.hidden)checkReminder();});
 
 if(document.modelContext?.registerTool){
