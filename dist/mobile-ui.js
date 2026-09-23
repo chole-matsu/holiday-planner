@@ -1,7 +1,7 @@
 import {COLORS,timeLabel,durationLabel,editActivity,eventAt} from './model.js';
 import {confirmActivity} from './conflicts.js';
 
-export function setupMobileUI({getState,getDate,commit,remove,render}) {
+export function setupMobileUI({getState,getDate,commit,remove,render,plan}) {
   const $=selector=>document.querySelector(selector);
   const media=matchMedia('(max-width: 800px), (pointer: coarse)');
   const dialog=$('#event-dialog');
@@ -81,7 +81,7 @@ export function setupMobileUI({getState,getDate,commit,remove,render}) {
       const categoryId=$('input[name="event-category"]:checked')?.value;
       if(!getState().categories.some(category=>category.id===categoryId))throw new Error('カテゴリを選んでください。');
       const start=Number($('#event-start').value),duration=Number($('#event-end').value)-start;
-      const next=confirmActivity(currentDay(),getState().categories,categoryId,start,duration,source);if(!next)return;
+      currentDay();const next=plan(editorDate,categoryId,start,duration,source);if(!next)return;
       if(mobile()&&start<12){showEarly=true;$('#early-hours').textContent='6時から表示';$('#early-hours').setAttribute('aria-pressed','true');}
       dialog.close();setView('schedule',{scroll:false});commit(editorDate,next);
       if(mobile())requestAnimationFrame(()=>$(`.slot[data-hour="${start}"]`)?.scrollIntoView({block:'center',behavior:'smooth'}));

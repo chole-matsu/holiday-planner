@@ -1,6 +1,12 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {planActivity} from '../dist/model.js';
+import {planActivity,planParallel} from '../dist/model.js';
+test('同時刻の2件目は既存予定を動かさず追加',()=>{const first={18:{categoryId:'reading',duration:4}};const p=planParallel(first,{},'walk',18,2);assert.deepEqual(p.primary,first);assert.deepEqual(p.secondary,{18:{categoryId:'walk',duration:2}});assert.deepEqual(p.changes,[]);});
+test('3件目は選択側のみ後倒し計画にする',()=>{const first={18:{categoryId:'reading',duration:4}},second={18:{categoryId:'walk',duration:4}};const p=planParallel(first,second,'meal',18,2);assert.equal(p.primary[20].categoryId,'reading');assert.deepEqual(p.secondary,second);assert.equal(p.changes.length,1);});
+test('並行予定を移動してももう一方は保持',()=>{const first={18:{categoryId:'reading',duration:4}},second={18:{categoryId:'walk',duration:2}};const p=planParallel(first,second,'walk',20,2,18,1);assert.deepEqual(p.primary,first);assert.deepEqual(p.secondary,{20:{categoryId:'walk',duration:2}});});
+test('並行予定と標準時間を保存復元',()=>{const s=parseState(null);s.days={'2026-09-23':{18:{categoryId:'reading',duration:2}}};s.parallelDays={'2026-09-23':{18:{categoryId:'walk',duration:4}}};assert.deepEqual(parseState(JSON.stringify(s)),s);s.parallelDays['2026-09-23'][47]={categoryId:'sleep',duration:2};assert.throws(()=>parseState(JSON.stringify(s)));});
+test('旧保存データに並行予定がなくても読み込める',()=>{const s=parseState(null);assert.deepEqual(parseState(JSON.stringify(s)).days,{});});
+test('左右をまたぐ長い予定も同時2件なら後倒ししない',()=>{const p=planParallel({18:{categoryId:'reading',duration:2}},{20:{categoryId:'walk',duration:2}},'meal',18,4);assert.deepEqual(p.changes,[]);assert.equal(Object.keys(p.primary).length+Object.keys(p.secondary).length,3);});
 import {confirmActivity} from '../dist/conflicts.js';
 test('重複する既存予定を連鎖して後倒しし、空き時間以降は維持',()=>{const day={18:{categoryId:'reading',duration:2},20:{categoryId:'walk',duration:2},28:{categoryId:'meal',duration:2}};const plan=planActivity(day,'workout',19,4);assert.deepEqual(Object.keys(plan.day),['19','23','25','28']);assert.deepEqual(plan.changes.map(c=>[c.from,c.to]),[[18,23],[20,25]]);assert.equal(day[18].duration,2);});
 test('移動元を除いて後倒し計画を作る',()=>{const plan=planActivity({10:{categoryId:'walk',duration:2},18:{categoryId:'reading',duration:4}},'walk',19,2,10);assert.deepEqual(Object.keys(plan.day),['19','21']);assert.equal(plan.day[21].duration,4);});

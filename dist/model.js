@@ -17,6 +17,21 @@ export function durationLabel(slots){return slots%2?`${slots>1?Math.floor(slots/
 function validateRange(start,duration){if(!Number.isInteger(start)||!Number.isInteger(duration)||start<0||duration<1||start+duration>48)throw new Error('予定は30分以上、24:00までの範囲で指定してください');}
 export function eventAt(day,slot){return Object.entries(day).find(([start,event])=>Number(start)<=slot&&slot<Number(start)+event.duration);}
 export function freeRange(day,start,duration){return !Object.entries(day).some(([other,event])=>start<Number(other)+event.duration&&Number(other)<start+duration);}
+export function planParallel(primary,secondary,categoryId,start,duration,source=null,lane=0){
+  validateRange(start,duration);
+  const days=[structuredClone(primary),structuredClone(secondary)];
+  if(source!==null){if(!days[lane][source])throw new Error('移動元が見つかりません');delete days[lane][source];}
+  if(!freeRange(days[0],start,duration)&&!freeRange(days[1],start,duration)){
+    const entries=days.flatMap((day,column)=>Object.entries(day).map(([key,event])=>({start:Number(key),event,lane:column})));
+    entries.push({start,event:{categoryId,duration},lane,added:true});entries.sort((a,b)=>a.start-b.start);
+    const arranged=[{},{}],ends=[0,0];let addedLane=lane,possible=true;
+    for(const entry of entries){const column=ends[entry.lane]<=entry.start?entry.lane:1-entry.lane;if(ends[column]>entry.start){possible=false;break;}arranged[column][entry.start]=entry.event;ends[column]=entry.start+entry.event.duration;if(entry.added)addedLane=column;}
+    if(possible)return {primary:arranged[0],secondary:arranged[1],changes:[],lane:addedLane};
+  }
+  const target=freeRange(days[lane],start,duration)?lane:freeRange(days[1-lane],start,duration)?1-lane:lane;
+  const plan=planActivity(days[target],categoryId,start,duration);
+  days[target]=plan.day;return {primary:days[0],secondary:days[1],changes:plan.changes,lane:target};
+}
 export function putActivity(day,categoryId,target,source=null,duration=1){
   const next=structuredClone(day);
   if(source!==null){
@@ -95,6 +110,10 @@ export function parseState(raw){
   if(!state.checkedByDate||typeof state.checkedByDate!=='object'||Array.isArray(state.checkedByDate))throw new Error('チェック状態を読み込めません');
   for(const [date,items] of Object.entries(state.checkedByDate)){
     if(!validDate(date)||!Array.isArray(items)||items.some(item=>typeof item!=='string'||!item.trim()))throw new Error('チェック状態を読み込めません');
+  }
+  if(state.parallelDays!==undefined){
+    const checked=parseState(JSON.stringify({version:2,categories:state.categories,days:state.parallelDays,checkedByDate:{}}));
+    state.parallelDays=checked.days;
   }
   state.version=2;return state;
 }
